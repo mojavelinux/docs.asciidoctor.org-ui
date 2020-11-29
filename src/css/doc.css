@@ -236,6 +236,16 @@ h1.page + aside.toc.embedded {
   margin-top: 1.5rem;
 }
 
+.doc div.tableblock {
+  margin: 2rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.doc div.tableblock > table.tableblock {
+  margin: 0;
+}
+
 .doc td.tableblock > .content > :first-child {
   margin-top: 0;
 }
