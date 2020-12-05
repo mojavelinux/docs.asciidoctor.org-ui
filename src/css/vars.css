@@ -66,16 +66,28 @@
   --toc-border-color: var(--panel-border-color);
   --toc-line-height: 1.2;
   /* admonitions */
-  --caution-color: #a0439c;
+  --caution-icon: "\f06d";
+  --caution-color: #802392;
+  --caution-shade-color: #6d1e7c;
   --caution-on-color: var(--color-white);
-  --important-color: #d32f2f;
+  --important-icon: "\f06a";
   --important-color: var(--color-brand-primary);
+  --important-shade-color: #c2003c;
   --important-on-color: var(--color-white);
-  --note-color: #217ee7;
+  /*
+  --note-icon: "\f129";
+  */
+  --note-icon: "\f328";
+  --note-color: #2d7dd2;
+  --note-shade-color: #266ab3;
   --note-on-color: var(--color-white);
-  --tip-color: #41af46;
+  --tip-icon: "\f0eb";
+  --tip-color: #43b929;
+  --tip-shade-color: #399e23;
   --tip-on-color: var(--color-white);
-  --warning-color: #e18114;
+  --warning-icon: "\f071";
+  --warning-color: #f70;
+  --warning-shade-color: #d96500;
   --warning-on-color: var(--color-white);
   /* doc */
   --doc-font-color: var(--color-jet-50);

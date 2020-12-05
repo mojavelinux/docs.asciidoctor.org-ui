@@ -340,8 +340,6 @@
   padding: 0 0.5rem;
   height: 1.25rem;
   line-height: 1;
-  font-weight: var(--admonition-label-font-weight);
-  text-transform: uppercase;
   border-radius: 0.45rem;
   transform: translate(-0.5rem, -50%);
 }
@@ -379,6 +377,51 @@
 
 .doc .admonitionblock .icon i::after {
   content: attr(title);
+  font-family: var(--body-font-family);
+  font-weight: var(--admonition-label-font-weight);
+  text-transform: uppercase;
+}
+
+.doc .admonitionblock .icon i::before {
+  font-size: calc(14 / var(--rem-base) * 1rem);
+  height: inherit;
+  width: 1.5rem;
+  margin-left: -0.5rem;
+  margin-right: 0.25rem;
+  padding-left: 0.1em;
+  padding-bottom: 0.05em;
+  border-radius: 0.45rem 0 0 0.45rem;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.doc .admonitionblock.note .icon i::before {
+  content: var(--note-icon);
+  background-color: var(--note-shade-color);
+}
+
+.doc .admonitionblock.tip .icon i::before {
+  content: var(--tip-icon);
+  /*
+  font-weight: 400;
+  */
+  background-color: var(--tip-shade-color);
+}
+
+.doc .admonitionblock.caution .icon i::before {
+  content: var(--caution-icon);
+  background-color: var(--caution-shade-color);
+}
+
+.doc .admonitionblock.important .icon i::before {
+  content: var(--important-icon);
+  background-color: var(--important-shade-color);
+}
+
+.doc .admonitionblock.warning .icon i::before {
+  content: var(--warning-icon);
+  background-color: var(--warning-shade-color);
 }
 
 .doc .imageblock {

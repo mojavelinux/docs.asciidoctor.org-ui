@@ -38,8 +38,8 @@ module.exports = (src, dest, preview) => () => {
       }),
     postcssUrl([
       {
-        filter: '**/~typeface-*/files/*',
-        url: (asset) => {
+        filter: ({ url }) => /^~.+\.woff2?$/.test(url),
+        url: (asset, { from }) => {
           const relpath = asset.pathname.substr(1)
           const abspath = require.resolve(relpath)
           const basename = ospath.basename(abspath)
@@ -48,7 +48,8 @@ module.exports = (src, dest, preview) => () => {
             fs.mkdirSync(ospath.join(dest, 'font'), { recursive: true })
             fs.copyFileSync(abspath, destpath)
           }
-          return path.join('..', 'font', basename)
+          const fontdir = from.endsWith('/vendor') ? path.join('..', '..', 'font') : path.join('..', 'font')
+          return path.join(fontdir, basename)
         },
       },
     ]),
