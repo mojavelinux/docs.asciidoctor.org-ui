@@ -7,15 +7,13 @@
   var S_KEY_CODE = 83
   var SOLIDUS_KEY_CODE = 191
   var SAVED_SEARCH_STATE_KEY = 'docs:saved-search-state'
-  var SAVED_SEARCH_STATE_VERSION = '1'
+  var SAVED_SEARCH_STATE_VERSION = '2'
 
   activateSearch(require('docsearch.js/dist/cdn/docsearch.js'), document.getElementById('search-script').dataset)
 
   function activateSearch (docsearch, config) {
     appendStylesheet(config.stylesheet)
-    var baseAlgoliaOptions = {
-      hitsPerPage: parseInt(config.pageSize) || 20, // cannot exceed the hitsPerPage value defined on the index
-    }
+    var baseAlgoliaOptions = { hitsPerPage: parseInt(config.pageSize) || 25 }
     var searchField = document.getElementById(config.searchFieldId || 'search')
     searchField.appendChild(Object.assign(document.createElement('div'), { className: 'algolia-autocomplete-results' }))
     var controller = docsearch({
@@ -32,6 +30,7 @@
         autoWidth: false,
         templates: {
           footer:
+            '<div class="ds-filter"></div>' +
             '<div class="ds-footer"><div class="ds-pagination">' +
             '<span class="ds-pagination--curr">Page 1</span>' +
             '<a href="#" class="ds-pagination--prev">Prev</a>' +
@@ -50,6 +49,8 @@
     var menu = dropdown.$menu
     var dataset = dropdown.datasets[0]
     dataset.cache = false
+    dataset.maxResults = config.maxResults || 500
+    dataset.pageSize = baseAlgoliaOptions.hitsPerPage
     dataset.source = controller.getAutocompleteSource(undefined, processQuery.bind(typeahead, controller))
     delete dataset.templates.footer
     controller.queryDataCallback = processQueryData.bind(typeahead)
@@ -184,6 +185,19 @@
     }
   }
 
+  function updateFilters () {
+    var facetFilters = this.dropdown.$menu
+      .find('.ds-filter input')
+      .map(function () {
+        if (this.checked) {
+          var version = this.parentNode.querySelector('select')
+          return version && version.value ? version.value : this.value
+        }
+      })
+      .get()
+    this.dropdown.datasets[0].filters = facetFilters.length ? facetFilters.join(' OR ') : ''
+  }
+
   function paginate (delta, e) {
     e.preventDefault()
     var dataset = this.dropdown.datasets[0]
@@ -221,9 +235,20 @@
 
   function processQuery (controller, query) {
     var algoliaOptions = {}
-    var dataset = this.dropdown.datasets[0]
-    var activeResult = dataset.result
-    algoliaOptions.page = !activeResult || query === activeResult.query ? dataset.page || 0 : (dataset.page = 0)
+    var dropdown = this.dropdown
+    var dataset = dropdown.datasets[0]
+    if (!dropdown.restoring) {
+      var activeResult = dropdown.isEmpty ? undefined : dataset.result
+      if (activeResult && query === activeResult.query) {
+        if (dataset.filters !== dataset.result.filters) dataset.page = 0
+      } else {
+        dataset.filters = ''
+        algoliaOptions.hitsPerPage = dataset.maxResults
+        dataset.page = 0
+      }
+    }
+    if (dataset.filters) algoliaOptions.filters = dataset.filters
+    if (dataset.page) algoliaOptions.page = dataset.page
     controller.algoliaOptions = Object.keys(algoliaOptions).length
       ? Object.assign({}, controller.baseAlgoliaOptions, algoliaOptions)
       : controller.baseAlgoliaOptions
@@ -231,11 +256,147 @@
 
   function processQueryData (data) {
     var result = data.results[0]
-    this.dropdown.datasets[0].result = { page: result.page, pages: result.nbPages, query: result.query }
-    result.hits = preserveHitOrder(result.hits)
+    var query = result.query
+    var filters = ~result.params.indexOf('filters=')
+      ? window.decodeURIComponent(
+        result.params
+          .split('&')
+          .find(function (param) {
+            return param.startsWith('filters=')
+          })
+          .substr(8)
+      )
+      : ''
+    var dataset = this.dropdown.datasets[0]
+    var activeResult = dataset.result
+    if (!activeResult || activeResult.query !== query) {
+      var components = this.dropdown.restoring
+        ? dataset.components
+        : (dataset.components = getFilterableComponents(result.hits))
+      renderFilters.call(this, components, filters)
+    }
+    var pages = Math.ceil(Math.min(result.nbHits, dataset.maxResults) / dataset.pageSize)
+    dataset.result = { filters: filters, page: result.page, pages: pages, query: result.query }
+    result.hits = preserveHitOrder(result.hits.slice(0, dataset.pageSize))
   }
 
-  // preserves the original order of results by qualifying unique occurrences of the same lvl0 and lvl1 values
+  function getFilterableComponents (hits) {
+    return Object.entries(
+      hits.reduce(function (accum, hit) {
+        var componentVersionInfo = extractComponentVersionInfo(hit)
+        var name = componentVersionInfo.name
+        var version = componentVersionInfo.version
+        var component = accum[name] || (accum[name] = { title: componentVersionInfo.title })
+        if (version && hit.component_version) {
+          var versions = component.versions || (component.versions = {})
+          if (!(version in versions)) {
+            if ((hit.component_version || [])[1] === name) component.latestVersion = version
+            versions[version] = hit.display_version || version
+          }
+        }
+        return accum
+      }, {})
+    )
+      .sort(function (a, b) {
+        return a[1].title.localeCompare(b[1].title)
+      })
+      .reduce(function (componentAccum, componentEntry) {
+        var component = componentEntry[1]
+        var versions = component.versions
+        if (versions && (versions = Object.entries(versions)).length > 1) {
+          component.versions = versions
+            .sort(function (a, b) {
+              return -a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' })
+            })
+            .reduce(function (versionAccum, versionEntry) {
+              versionAccum[versionEntry[0]] = versionEntry[1]
+              return versionAccum
+            }, {})
+        }
+        componentAccum[componentEntry[0]] = component
+        return componentAccum
+      }, {})
+  }
+
+  function extractComponentVersionInfo (hit) {
+    var name, title, version
+    var segments = (hit.component_version || [])[0]
+    if (segments) {
+      segments = segments.split('@')
+      name = segments[0]
+      version = segments[1]
+      title = hit.component_title
+    } else {
+      name = hit.component
+      segments = (hit.hierarchy.lvl0 || name).split(/ (?=\d+(?:\.|$))/)
+      title = segments[0]
+      version = segments[1]
+    }
+    return { name: name, version: version, title: title }
+  }
+
+  function renderFilters (components, filters) {
+    var filterContainer = this.dropdown.$menu.find('.ds-filter').empty()
+    var selected = filters
+      ? filters.split(' OR ').reduce(function (accum, facetFilter) {
+        if (facetFilter.startsWith('component_version')) {
+          var valueParts = facetFilter.split(':')[1].split('@')
+          accum.push('component:' + valueParts[0])
+        }
+        accum.push(facetFilter)
+        return accum
+      }, [])
+      : undefined
+    var typeahead = this
+    Object.entries(components).forEach(function (componentEntry) {
+      var componentName = componentEntry[0]
+      var component = componentEntry[1]
+      var filterOption = document.createElement('div')
+      var checkbox = Object.assign(document.createElement('input'), {
+        id: 'facet-filter-' + componentName,
+        type: 'checkbox',
+        value: 'component:' + componentName,
+      })
+      if (selected && ~selected.indexOf(checkbox.value)) checkbox.checked = true
+      filterOption.appendChild(checkbox)
+      var label = Object.assign(document.createElement('label'), { htmlFor: 'facet-filter-' + componentName })
+      label.appendChild(document.createTextNode(component.title))
+      filterOption.appendChild(label)
+      var componentVersions = component.versions
+      var versions
+      if (componentVersions) {
+        versions = document.createElement('select')
+        if (Object.keys(componentVersions).length > 1) {
+          var wildcardVersionOption = Object.assign(document.createElement('option'), { value: '' })
+          wildcardVersionOption.appendChild(document.createTextNode('*'))
+          versions.appendChild(wildcardVersionOption)
+        }
+        Object.entries(componentVersions).forEach(function (componentVersionEntry) {
+          var version = componentVersionEntry[0]
+          var displayVersion = componentVersionEntry[1]
+          var versionOption = Object.assign(document.createElement('option'), {
+            value: 'component_version:' + componentName + '@' + version,
+          })
+          if (checkbox.checked ? ~selected.indexOf(versionOption.value) : version === component.latestVersion) {
+            versionOption.selected = true
+          }
+          versionOption.appendChild(document.createTextNode(displayVersion))
+          versions.appendChild(versionOption)
+        })
+        filterOption.appendChild(versions)
+      }
+      filterContainer.append(filterOption)
+      checkbox.addEventListener('change', applyFilters.bind(typeahead))
+      if (versions) versions.addEventListener('change', applyFilters.bind(typeahead))
+    })
+  }
+
+  function applyFilters () {
+    updateFilters.call(this)
+    requery.call(this)
+  }
+
+  // preserves original order of results by distinguishing non-sequential occurrences of the same lvl0 and lvl1 values
   function preserveHitOrder (hits) {
     var prevLvl0
     var lvl0Qualifiers = {}
@@ -243,6 +404,14 @@
     return hits.map(function (hit) {
       var lvl0 = hit.hierarchy.lvl0
       var lvl1 = hit.hierarchy.lvl1
+      if (!lvl0) {
+        if ((lvl0 = hit.component_title)) {
+          lvl0 = hit.hierarchy.lvl0 = lvl0 + (hit.display_version ? ' ' + hit.display_version : '')
+        } else {
+          lvl0 = hit.hierarchy.lvl0 = hit.component + (hit.version ? ' ' + hit.version : '')
+        }
+      }
+      if (!lvl1) lvl1 = hit.hierarchy.lvl1 = lvl0
       var lvl0Qualifier = lvl0Qualifiers[lvl0]
       if (lvl0 !== prevLvl0) {
         lvl0Qualifiers[lvl0] = lvl0Qualifier == null ? (lvl0Qualifier = '') : (lvl0Qualifier += ' ')
@@ -273,6 +442,8 @@
     if (!searchState) return
     this.dropdown.restoring = searchState
     var dataset = this.dropdown.datasets[0]
+    dataset.components = searchState.components
+    dataset.filters = searchState.filters
     dataset.page = searchState.page
     delete dataset.result
     requery.call(this, searchState.query) // cursor is restored by onResultsUpdated =>
@@ -284,7 +455,9 @@
       SAVED_SEARCH_STATE_KEY,
       JSON.stringify({
         _version: SAVED_SEARCH_STATE_VERSION,
+        components: this.dropdown.datasets[0].components,
         cursor: this.dropdown.getCurrentCursor().index() + 1,
+        filters: this.dropdown.datasets[0].filters,
         page: this.dropdown.datasets[0].page,
         query: this.getVal(),
       })
