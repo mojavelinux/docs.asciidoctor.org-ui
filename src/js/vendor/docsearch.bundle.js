@@ -6,7 +6,6 @@
   var LT_KEY_CODE = 188
   var S_KEY_CODE = 83
   var SOLIDUS_KEY_CODE = 191
-  var SEARCH_FILTER_ACTIVE_KEY = 'docs:search-filter-active'
   var SAVED_SEARCH_STATE_KEY = 'docs:saved-search-state'
   var SAVED_SEARCH_STATE_VERSION = '1'
 
@@ -65,11 +64,6 @@
     menu.off('mouseleave.aa')
     var suggestionSelector = '.' + dropdown.cssClasses.prefix + dropdown.cssClasses.suggestion
     menu.on('mousedown.aa', suggestionSelector, onSuggestionMouseDown.bind(dropdown))
-    typeahead.$facetFilterInput = input
-      .closest('#' + searchField.id)
-      .find('.filter input')
-      .on('change', toggleFilter.bind(typeahead))
-      .prop('checked', window.localStorage.getItem(SEARCH_FILTER_ACTIVE_KEY) === 'true')
     menu.find('.ds-pagination--prev').on('click', paginate.bind(typeahead, -1)).css('visibility', 'hidden')
     menu.find('.ds-pagination--next').on('click', paginate.bind(typeahead, 1)).css('visibility', 'hidden')
     monitorCtrlKey.call(typeahead)
@@ -107,18 +101,12 @@
     delete dropdown.restoring
     if (isClosed(this)) return
     updatePagination.call(dropdown)
-    if (restoring && restoring.query === this.getVal() && restoring.filter === this.$facetFilterInput.prop('checked')) {
+    if (restoring && restoring.query === this.getVal()) {
       var cursor = restoring.cursor
       if (cursor) dropdown._moveCursor(cursor)
     } else {
       saveSearchState.call(this)
     }
-  }
-
-  function toggleFilter (e) {
-    if ('restoring' in this.dropdown) return
-    window.localStorage.setItem(SEARCH_FILTER_ACTIVE_KEY, e.target.checked)
-    isClosed(this) ? this.$input.focus() : requery.call(this)
   }
 
   function confineEvent (e) {
@@ -233,9 +221,6 @@
 
   function processQuery (controller, query) {
     var algoliaOptions = {}
-    if (this.$facetFilterInput.prop('checked')) {
-      algoliaOptions.facetFilters = [this.$facetFilterInput.data('facetFilter')]
-    }
     var dataset = this.dropdown.datasets[0]
     var activeResult = dataset.result
     algoliaOptions.page = !activeResult || query === activeResult.query ? dataset.page || 0 : (dataset.page = 0)
@@ -287,7 +272,6 @@
     var searchState = readSavedSearchState()
     if (!searchState) return
     this.dropdown.restoring = searchState
-    this.$facetFilterInput.prop('checked', searchState.filter) // change event will be ignored
     var dataset = this.dropdown.datasets[0]
     dataset.page = searchState.page
     delete dataset.result
@@ -301,7 +285,6 @@
       JSON.stringify({
         _version: SAVED_SEARCH_STATE_VERSION,
         cursor: this.dropdown.getCurrentCursor().index() + 1,
-        filter: this.$facetFilterInput.prop('checked'),
         page: this.dropdown.datasets[0].page,
         query: this.getVal(),
       })
