@@ -240,6 +240,65 @@ To access the UI bundle,  append `dist/ui-bundle.zip` to the end of the preview 
 
 The temporary preview URL will automatically be decommissioned once the PR is closed.
 
+== DocSearch Configuration
+
+=== Faceted Search
+
+In order to enable faceted search, you need to define at least a `component` attribute on each record in the index.
+If you additionally want to search by component version, you also need to define a `component_version` attribute on each record.
+
+Since the component name appears in the URL, you can use the `start_url` property in the DocSearch config to define the `component` attribute using a variable.
+Here's an example:
+
+[source,json]
+----
+"start_urls": [
+  {
+    "url": "https://docs.example.com/(?P<component>.*?)/(?P<version_url_segment>.*?)/",
+    "variables": {
+      "component": [
+        "server"
+      ],
+      "version_url_segment": [
+        "1.1",
+        "1.0"
+      ]
+    }
+  }
+]
+----
+
+The DocSearch configuration does not provide a way to define custom attributes.
+Therefore, to set the `component_version` attribute, you need to add it using a meta tag to the pages being indexed.
+For example:
+
+[source,html]
+----
+<meta name="docsearch:component_version" content='["{{{./name}}}@{{{./version}}}"]'>
+----
+
+Then add this attribute to the list of attributes for faceting in the DocSearch configuration under `custom_settings`:
+
+[source,json]
+----
+"custom_settings": {
+  "attributesForFaceting": [
+    "component",
+    "component_version"
+  ],
+}
+----
+
+The content of a docsearch meta tag is interpretted as JSON.
+There's a reason we're using an array value.
+If the second entry in the array is set and matches the component name, this version is treated as the latest version.
+
+You may also want to set the following meta names:
+
+* component_title (used in the filter form)
+* display_version (used in the filter form)
+* version (used for sorting results)
+
 == Releases
 
 Releases are handled by the `gulp release` task, which is automated by a CI job.
