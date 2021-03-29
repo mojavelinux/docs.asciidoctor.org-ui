@@ -290,7 +290,9 @@
         if (version && hit.component_version) {
           var versions = component.versions || (component.versions = {})
           if (!(version in versions)) {
-            if ((hit.component_version || [])[1] === name) component.latestVersion = version
+            if (Array.isArray(hit.component_version) && hit.component_version[1] === name) {
+              component.latestVersion = version
+            }
             versions[version] = hit.display_version || version
           }
         }
@@ -320,17 +322,17 @@
 
   function extractComponentVersionInfo (hit) {
     var name, title, version
-    var segments = (hit.component_version || [])[0]
-    if (segments) {
-      segments = segments.split('@')
-      name = segments[0]
-      version = segments[1]
+    var componentVersion = hit.component_version
+    if (componentVersion) {
+      componentVersion = (Array.isArray(componentVersion) ? componentVersion[0] : componentVersion).split('@')
+      name = componentVersion[0]
+      version = componentVersion[1]
       title = hit.component_title
     } else {
       name = hit.component
-      segments = (hit.hierarchy.lvl0 || name).split(/ (?=\d+(?:\.|$))/)
-      title = segments[0]
-      version = segments[1]
+      componentVersion = (hit.hierarchy.lvl0 || name).split(/ (?=\d+(?:\.|$))/)
+      title = componentVersion[0]
+      version = componentVersion[1]
     }
     return { name: name, version: version, title: title }
   }
